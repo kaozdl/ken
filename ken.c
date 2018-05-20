@@ -195,6 +195,19 @@ int editorRowCxToRx(erow *row, int cx){
   return rx;
 }
 
+int editorRowRxToCx(erow *row, int rx){
+  int cur_rx = 0;
+  int cx;
+  for (cx = 0; cx < row->size; cx++){
+    if (row->chars[cx] == '\t')
+      cur_rx += (TABSTOP - 1) - (cur_rx % TABSTOP);
+    cur_rx++;
+
+    if (cur_rx > rx) return cx;
+  }
+  return cx;
+}
+
 void editorUpdateRow(erow *row){
   int tabs = 0;
   for (int j = 0; j < row->size; j++)
@@ -359,29 +372,75 @@ void editorSave(){
   if (E.filename == NULL){
     E.filename = editorPrompt("Save as: %s (ESC to cancel)");
     if (E.filename == NULL) {
-    editorSetStatusMessage("Save aborted");
-    return;
-  }
-
-  int len;
-  char *buf = editorRowsToString(&len);
-
-  int fd = open(E.filename, O_RDWR | O_CREAT, 0644);
-  if (fd != -1){
-    if(ftruncate(fd,len) != -1){
-      if(write(fd, buf, len) == len){
-        close(fd);
-        free(buf); // i MUST free the memory of buf since i ask for it
-        editorSetStatusMessage("%d bytes written to disk", len);
-        E.dirty = 0;
-        return;
-      }
+      editorSetStatusMessage("Save aborted");
+      return;
     }
-    close(fd);
+
+    int len;
+    char *buf = editorRowsToString(&len);
+
+    int fd = open(E.filename, O_RDWR | O_CREAT, 0644);
+    if (fd != -1){
+      if(ftruncate(fd,len) != -1){
+        if(write(fd, buf, len) == len){
+          close(fd);
+          free(buf); // i MUST free the memory of buf since i ask for it
+          editorSetStatusMessage("%d bytes written to disk", len);
+          E.dirty = 0;
+          return;
+        }
+      }
+      close(fd);
+    }
+    free(buf);
+    editorSetStatusMessage("Can't save! I/O error: %s", strerror(errno));
   }
-  free(buf);
-  editorSetStatusMessage("Can't save! I/O error: %s", strerror(errno));
+}
+
+// FIND
+void editorReplace(){
+  char *toFind = editorPrompt("Search: %s (ESC to cancel)");
+  char *toRep = editorPrompt("Replace With: %s (ESC to cancel)");
+  if (toFind == NULL || toRep == NULL ) return;
+  int found = 0;
+  for (int i = 0; i < E.numrows; i++){
+    erow *row = &E.row[i];
+    char *match = strstr(row->render, toFind);
+    if (match){
+      E.cy = i;
+      E.cx = editorRowRxToCx(row, match - row->render);
+      E.rowoff = E.numrows;
+      found++;
+    }
   }
+  //Now that im positioned i have to delete every char in the match
+  if (found){
+    for(unsigned int i = 0; i < strlen(toFind); i++){
+      editorRowDelChar(&E.row[E.cy],E.cx);
+    }
+  
+    for (unsigned int i = 0; i < strlen(toRep); i++)
+      editorInsertChar(toRep[i]);
+  } else editorSetStatusMessage("No matches found.");
+  free(toFind);
+  free(toRep);
+}
+
+void editorFind(){
+  char *query = editorPrompt("Search: %s (ESC to cancel)");
+  if (query == NULL) return;
+
+  for (int i =0; i < E.numrows; i++){
+    erow *row =&E.row[i];
+    char *match = strstr(row->render, query);
+    if (match){
+      E.cy = i;
+      E.cx = editorRowRxToCx(row,match - row->render);
+      E.rowoff = E.numrows;
+      break;
+    }
+  }
+  free(query);
 }
 
 // APPEND BUFFER
@@ -433,9 +492,10 @@ void editorDrawRows(struct abuf *ab){
     int filerow = i + E.rowoff;
     if (filerow >= E.numrows){
       if (E.numrows == 0 && i == E.screenrows/3){
-        char welcome[82];
+        char welcome[84];
         int welcomelen = snprintf(welcome, sizeof(welcome),
-            "K-li'l editor -- version %s", VERSION);
+            "--  Ken (KILO enhanced) editor --"
+            " Kalil de Lima: kaozdl@gmail.com --  version %s", VERSION);
         if (welcomelen > E.screencols) welcomelen = E.screencols;
         int padding = (E.screencols - welcomelen) / 2;
         if (padding) {
@@ -625,6 +685,12 @@ void editorProcessKeyPress(){
       if (E.cy < E.numrows)
         E.cx = E.row[E.cy].size;
       break;
+    case CTRL_KEY('r'):
+      editorReplace();
+      break;
+    case CTRL_KEY('f'):
+      editorFind();
+      break;
 
     case BACKSPACE:
     case CTRL_KEY('h'):
@@ -686,7 +752,8 @@ int main(int argc, char *argv[]){
     editorOpen(argv[1]);
   }
 
-  editorSetStatusMessage("HELP: Ctrl-Q = quit | Ctrl-S = save");
+  editorSetStatusMessage("HELP: Ctrl-Q = quit | Ctrl-S = save | Ctrl-F = find"
+                        " | Ctrl-R = find & replace");
 
   while (1){
     editorRefreshScreen();
