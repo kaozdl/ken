@@ -1,4 +1,4 @@
-# ken
+# Ken
 Lightweight Text-based editor.<br/>
 No dependencies needed just run make.<br/>
 This editor is based in the KILO editor as described in:https://viewsourcecode.org/snaptoken/kilo/index.html<br/> 
