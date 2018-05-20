@@ -65,7 +65,7 @@ struct editorConfig E;
 
 void editorSetStatusMessage(const char *fmt, ...);
 void editorRefreshScreen();
-char *editorPrompt(char *prompt);
+char *editorPrompt(char *prompt, void(*callback)(char *, int));
 
 // TERMINAL
 void die(const char *s){
@@ -370,7 +370,7 @@ void editorOpen(char *filename){
 
 void editorSave(){
   if (E.filename == NULL){
-    E.filename = editorPrompt("Save as: %s (ESC to cancel)");
+    E.filename = editorPrompt("Save as: %s (ESC to cancel)",NULL);
     if (E.filename == NULL) {
       editorSetStatusMessage("Save aborted");
       return;
@@ -399,8 +399,8 @@ void editorSave(){
 
 // FIND
 void editorReplace(){
-  char *toFind = editorPrompt("Search: %s (ESC to cancel)");
-  char *toRep = editorPrompt("Replace With: %s (ESC to cancel)");
+  char *toFind = editorPrompt("Search: %s (ESC to cancel)",NULL);
+  char *toRep = editorPrompt("Replace With: %s (ESC to cancel)",NULL);
   if (toFind == NULL || toRep == NULL ) return;
   int found = 0;
   for (int i = 0; i < E.numrows; i++){
@@ -418,7 +418,7 @@ void editorReplace(){
     for(unsigned int i = 0; i < strlen(toFind); i++){
       editorRowDelChar(&E.row[E.cy],E.cx);
     }
-  
+
     for (unsigned int i = 0; i < strlen(toRep); i++)
       editorInsertChar(toRep[i]);
   } else editorSetStatusMessage("No matches found.");
@@ -427,7 +427,7 @@ void editorReplace(){
 }
 
 void editorFind(){
-  char *query = editorPrompt("Search: %s (ESC to cancel)");
+  char *query = editorPrompt("Search: %s (ESC to cancel)",NULL);
   if (query == NULL) return;
 
   for (int i =0; i < E.numrows; i++){
@@ -440,6 +440,7 @@ void editorFind(){
       break;
     }
   }
+  editorSetStatusMessage("No matches found.");
   free(query);
 }
 
@@ -579,7 +580,7 @@ void editorSetStatusMessage(const char *fmt, ...){
 }
 
 // INPUT
-char *editorPrompt(char *prompt){
+char *editorPrompt(char *prompt, void (*callback)(char *, int)){
   size_t bufsize = 128;
   char *buf = malloc(bufsize);
 
@@ -595,11 +596,13 @@ char *editorPrompt(char *prompt){
       if (buflen != 0) buf[--buflen] = '\0';
     } else if (c == '\x1b') {
       editorSetStatusMessage("");
+      if (callback) callback(buf, c);
       free(buf);
       return NULL;
     } else if (c =='\r') {
       if (buflen != 0) {
         editorSetStatusMessage("");
+        if (callback) callback(buf, c);
         return buf;
       }
     } else if (!iscntrl(c) && c < 128) {
@@ -610,6 +613,7 @@ char *editorPrompt(char *prompt){
       buf[buflen++] = c;
       buf[buflen] = '\0';
     }
+    if (callback) callback(buf,c);
   }
 }
 
@@ -753,7 +757,7 @@ int main(int argc, char *argv[]){
   }
 
   editorSetStatusMessage("HELP: Ctrl-Q = quit | Ctrl-S = save | Ctrl-F = find"
-                        " | Ctrl-R = find & replace");
+      " | Ctrl-R = find & replace");
 
   while (1){
     editorRefreshScreen();
