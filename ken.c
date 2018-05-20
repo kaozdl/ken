@@ -411,6 +411,7 @@ void editorReplace(){
       E.cx = editorRowRxToCx(row, match - row->render);
       E.rowoff = E.numrows;
       found++;
+      break;
     }
   }
   //Now that im positioned i have to delete every char in the match
