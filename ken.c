@@ -512,7 +512,12 @@ void editorOpen(char *filename){
   E.filename = strdup(filename);
   editorSelectSyntaxHighlight();
   FILE *fp = fopen(filename, "r");
-  if (!fp) die("fopen");
+
+  if (!fp) {
+      //free might be redundant
+      free(fp);
+      return;
+  }
 
   char *line = NULL;
   size_t linecap = 0;
