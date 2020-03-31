@@ -562,6 +562,49 @@ void editorSave(){
   editorSetStatusMessage("Can't save! I/O error: %s", strerror(errno));
 }
 
+int isDirty(){
+  //Check if I have modified the file
+  if(E.dirty){
+    return E.dirty;
+  }
+
+  //Now check if the file on disk has changed
+  FILE *file = fopen(E.filename, "r");
+
+  //If the file was deleted since it was read, just report that as a change, any other error is a problem
+  if(!file){
+    if(errno == ENOENT){
+      return 1;
+    }else{
+      die("fopen");
+    }
+  }
+
+  int len;
+  char *buffer = editorRowsToString(&len);
+
+  //Diff my buffer and the file
+  for(int i = 0; i < len; i++){
+    int c = fgetc(file);
+    if(c == EOF){
+      return 1;
+    }
+
+    if((char) c != buffer[i]){
+      return 1;
+    }
+  }
+
+  if(fgetc(file) != EOF){
+    return 1;
+  }
+
+  fclose(file);
+  free(buffer);
+
+  return 0;
+}
+
 
 // FIND
 void editorReplace(){
@@ -760,7 +803,7 @@ void editorDrawStatusBar(struct abuf *ab){
   char status[80], rstatus[80];
   int len = snprintf(status, sizeof(status), "%.20s - %d lines %s",
       E.filename ? E.filename : "[No Name]", E.numrows,
-      E.dirty ? "(modified)" : "");
+                     isDirty() ? "(modified)" : "");
   int rlen = snprintf(rstatus, sizeof(rstatus), "%s | %d/%d",
       E.syntax ? E.syntax->filetype : "no ft" ,E.cy +1, E.numrows);
   if (len > E.screencols) len = E.screencols;
@@ -903,7 +946,7 @@ void editorProcessKeyPress(){
       break;
 
     case CTRL_KEY('q'):
-      if (E.dirty && quit_times > 0){
+      if (isDirty() && quit_times > 0){
         editorSetStatusMessage("WARNING!!! File has unsaved changes. "
             "Press Ctrl-Q %d more times to quit.",quit_times);
         quit_times--;
